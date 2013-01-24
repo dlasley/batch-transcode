@@ -127,7 +127,7 @@ class transcode:
                         #print 'Removed: %s/%s%s'%(root,file_name,extension)
                         #print new_files
                         #exit()
-                print new_files
+        print new_files
     def encode_it(self,file_path,new_file,transcode_settings={}):
         '''
             Encode wrapper, whole process
@@ -255,7 +255,15 @@ class transcode:
         mediainfo   =   transcode.mediainfo(file_path)
         track_maps = {}
         for track_id, track in mkvmerge.iteritems():
-            track_maps[track['number']] = track
+            try:
+                track_maps[track['number']] = track
+            except KeyError:
+                for i in xrange(0,100):
+                    try:
+                        track_maps[str(i)]
+                    except KeyError:
+                        track_maps[str(i)] = track
+                        break
         for track in mediainfo['tracks']:
             try:
                 for attr, value in track_maps[track['ID']].iteritems():
