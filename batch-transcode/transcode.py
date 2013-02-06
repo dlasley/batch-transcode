@@ -26,9 +26,6 @@ class transcode:
         'dont_delete':  False,
     } 
     nice_lvl        =   19 
-    out_dir         =   '/media/Motherload/3-transcoding/'
-    encode_dir      =   '%sencodeBox/' % out_dir
-    finished_dir    =   '%sfinished/' % out_dir
     pipe_output     =   open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
@@ -76,13 +73,15 @@ class transcode:
     vid_exts        =   ['.mkv','.m4v','.mp4','.mpg','.avi']
     native_language =   ('English','eng')
     THREADS = 1
-    def __init__(self,indir,debug=False):
+    def __init__(self,indir,outdir,debug=False):
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir, self.dir_permissions)
         if not os.path.isdir(self.encode_dir):
             os.mkdir(self.encode_dir, self.dir_permissions)
         if not os.path.isdir(self.finished_dir):
             os.mkdir(self.finished_dir, self.dir_permissions)
+        self.encode_dir      =   '%sencodeBox/' % out_dir
+        self.finished_dir    =   '%sfinished/' % out_dir
         self.__debug = debug
         self.encode_directory(indir)
         self.cleanup_files = []
