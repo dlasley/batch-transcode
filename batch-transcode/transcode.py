@@ -5,7 +5,7 @@
 #    
 #    @author     David Lasley, dave -at- dlasley -dot- net
 #    @package    batch-transcode
-#    @version    $Id$
+#    @version    $Id: transcode.py 5 2013-01-24 21:50:50Z dave@dlasley.net $
 
 import threading
 import re
@@ -16,20 +16,23 @@ import time
 import logging
 from pprint import pprint
 
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+
 class transcode:
     dry_runs        =   {
         'demux'     :   False,
         'transcode' :   False,
-        'remux'     :   False
+        'remux'     :   False,
+        'dont_delete':  False,
     } 
     nice_lvl        =   19 
-    out_dir         =   '/media/Motherload/2-transcoding/'
+    out_dir         =   '/media/Motherload/3-transcoding/'
     encode_dir      =   '%sencodeBox/' % out_dir
     finished_dir    =   '%sfinished/' % out_dir
-    pipe_output     =   open('/home/dlasley/transcode.out','w')
+    pipe_output     =   open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
-    lng_codes_doc   =   '/var/www/dave_media_dev/video_manipulation/lng_codes.txt'
+    lng_codes_doc   =   os.path.join(os.path.dirname(os.path.realpath(__file__)),'lng_codes.txt')
     settings_file = 'video_settings.xml'
     transcode_settings = {
         'x264'      :   {
@@ -37,7 +40,7 @@ class transcode:
                         },
         'avconv'    :   {
                             'vcodec'    :   'libx264',
-                            'preset'    :   'placebo', #  Ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo
+                            'preset'    :   'veryslow', #  Ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo
                             'an'        :   True,   #   No audio
                             'y'         :   True,   #   Overwrite
                             'sn'        :   True,   #   No subs
@@ -45,6 +48,7 @@ class transcode:
                             'level'     :   '41',
                         },
         'fix_dvds'  :   False,
+        'deinterlace':  False,
         'container' :   'mkv',
         'br_percent':   False   #   Percent of bitrate (INT), False is go with program defaults
     }
@@ -71,7 +75,7 @@ class transcode:
     }
     vid_exts        =   ['.mkv','.m4v','.mp4','.mpg','.avi']
     native_language =   ('English','eng')
-    THREADS = 4
+    THREADS = 1
     def __init__(self,indir,debug=False):
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir, self.dir_permissions)
@@ -95,20 +99,21 @@ class transcode:
         self.new_files = []
         self.worker_threads = {}
         def thread(root,new_root,file_name,extension,transcode_settings):
-            self.new_files.append( self.encode_it('%s/%s%s'%(root,file_name,extension), '%s/%s%s' % (new_root, file_name, extension),transcode_settings) )
+            self.new_files.append( self.encode_it(os.path.join(root,'%s%s'%(file_name,extension)), os.path.join(new_root, file_name, extension),transcode_settings) )
             del self.worker_threads[file_name]
-            #os.unlink('%s/%s%s'%(root,file_name,extension))
-            #logging.debug('DELETED: %s/%s%s'%(root,file_name,extension))
+            if True not in self.dry_runs:   #<  Delete the file if not testing or specified
+                os.unlink(os.path.join(root,file_name,extension))
+                logging.debug('DELETED: %s'%os.path.join(root,file_name,extension))
         for root, dirs, files in os.walk(inpath):
             dirs.sort()
             files.sort()
             if '.Apple' not in root:
-                new_root = '%s%s' % (self.finished_dir,root.replace(inpath,''))
+                new_root = os.path.join(self.finished_dir,root.replace(inpath,''))
                 if not os.path.isdir(new_root):
                     os.mkdir(new_root)
                 try:
-                    with open('%s/%s'%(root,self.settings_file)) as f: pass
-                    transcode_settings = self.parse_video_settings('%s/%s'%(root,self.settings_file))
+                    with open(os.path.join(root,self.settings_file)) as f: pass
+                    transcode_settings = self.parse_video_settings(os.path.join(root,self.settings_file))
                     print transcode_settings
                 except IOError:
                     transcode_settings = {}
@@ -127,7 +132,7 @@ class transcode:
                         #print 'Removed: %s/%s%s'%(root,file_name,extension)
                         #print new_files
                         #exit()
-        print new_files
+        #print new_files
     def encode_it(self,file_path,new_file,transcode_settings={}):
         '''
             Encode wrapper, whole process
@@ -161,8 +166,11 @@ class transcode:
         track_order = self.choose_track_order(media_info)
         new_file = transcode.remux(demuxed,media_info,lng_codes,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
         for cleanup_file in cleanup_files:
-            print 'Removing %s' % cleanup_file
-            os.remove(cleanup_file)
+            try:
+                logging.debug( 'Removing %s' % cleanup_file)
+                os.remove(cleanup_file)
+            except OSError:
+                logging.error('Could not delete %s' % cleanup_file)
         return new_file
     '''     Static Methods      '''
     @staticmethod
@@ -355,14 +363,12 @@ class transcode:
                 tracks.append(track_info)
         try:
             if len(track_types['Video'])>1:
-                exit('Holy Crap I Never Would Have Expected To See This Error.')
+                raise Exception('No Video Track In Input File')
         except KeyError:
-            print 'media_info len(track_types[Video]>1) \r\n%s\r\n%s\r\n%s' % (tracks,track_types,file_path)
-            exit(0)
+            raise Exception( 'media_info len(track_types[Video]>1) \r\n%s\r\n%s\r\n%s' % (tracks,track_types,file_path) ) 
         return {'tracks':tracks,'id_maps':track_types}
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
-        print media_info
         cmd = [u'avconv', u'-i', unicode('"'+old_file+'"', "utf-8"), u'-passlogfile' , u'"'+threading.currentThread().getName().encode('utf-8')+u'"' ]
         transcode_settings = transcode.transcode_settings
         height = int(media_info['Height'].replace(' pixels','').replace(' ',''))
@@ -390,21 +396,37 @@ class transcode:
         #        if not setting_value == True:
         #            new_cmd.append(str(setting_value))
         #        cmd.append(' '.join(new_cmd))
-        if transcode_settings['fix_dvds']   :  cmd.append(transcode.fix_dvds_cmd(height,width))
+        if transcode_settings['fix_dvds']:
+            cmd.append(transcode.fix_dvds_cmd(height,width))
+        if transcode_settings['deinterlace']:
+            cmd.append('-vf yadif')
         first_cmd = cmd[:]
         first_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', u'/dev/null'] )
         cmd.extend([u'-pass', u'2', unicode('"'+new_file+'"', "utf-8")])
+        logging.debug( '%s %s' % (first_cmd, cmd))
+        logging.info('Transcoding.')
         if dry_run:
-            print first_cmd, cmd
             return new_file
         else:
-            print first_cmd, cmd
-            if subprocess.check_call([unicode(' ').join(first_cmd)],shell=True,cwd=transcode.encode_dir,stdout=transcode.pipe_output,preexec_fn=lambda : os.nice(transcode.nice_lvl)) == 0:
-                if subprocess.check_call([unicode(' ').join(cmd)],shell=True,cwd=transcode.encode_dir,stdout=transcode.pipe_output,preexec_fn=lambda : os.nice(transcode.nice_lvl)) == 0:
+            if subprocess.check_call(
+                [unicode(' ').join(first_cmd)],
+                shell=True, cwd=transcode.encode_dir,
+                stdout=transcode.pipe_output,
+                stderr=transcode.pipe_output,
+                preexec_fn=lambda : os.nice(transcode.nice_lvl)
+            ) == 0:
+                if subprocess.check_call(
+                    [unicode(' ').join(cmd)],
+                    shell=True, cwd=transcode.encode_dir,
+                    stdout=transcode.pipe_output,
+                    stderr=transcode.pipe_output,
+                    preexec_fn=lambda : os.nice(transcode.nice_lvl)
+                ) == 0:
                     return new_file
     @staticmethod
     def fix_dvds_cmd(height,width):
         return '-s %sX%s -vf crop=%s:%s:0:%s' % (width,height,width,height-(height*.25),height*.125)
+    
     @staticmethod
     def demux(file_path, media_info, dry_run=False):
         '''
@@ -423,11 +445,16 @@ class transcode:
                 demuxed.append(u'%s%s%s.%s'%(transcode.encode_dir,threading.currentThread().getName().encode('utf-8'),track['ID'],track['extension']))
             except KeyError:
                 pass
-        print cmd
+        logging.debug( cmd )
+        logging.info('Demuxing.')
         if dry_run:
             return demuxed
         else:
-            if subprocess.check_call(cmd,cwd=transcode.encode_dir,stdout=transcode.pipe_output,preexec_fn=lambda : os.nice(transcode.nice_lvl)) == 0:
+            if subprocess.check_call(cmd, cwd=transcode.encode_dir,
+                                     stdout=transcode.pipe_output,
+                                     stderr=transcode.pipe_output,
+                                     preexec_fn=lambda : os.nice(transcode.nice_lvl)
+                                     ) == 0:
                 return demuxed
     @staticmethod
     def remux(mux_files,media_info,lng_codes,new_file,dups=[],track_order=False,dry_run=False):
@@ -440,7 +467,6 @@ class transcode:
             
             @return String  New file path
         '''
-        print new_file
         try:
             movie_name = media_info['tracks'][0]['Movie_name']
         except KeyError:
@@ -465,12 +491,17 @@ class transcode:
                 #   media_info['tracks'][i+1]   :   mux_files[i]
                 if mux_files[i] not in dups:
                     cmd.extend( [u'--language', u'0:%s' % lng_codes[media_info['tracks'][i+1]['Language']], u'%s' % mux_files[i] ] )
-        print ' '.join(cmd)
-        if subprocess.check_call(cmd,cwd=transcode.encode_dir,stdout=transcode.pipe_output,preexec_fn=lambda : os.nice(transcode.nice_lvl)) == 0:
+        logging.debug( ' '.join(cmd) )
+        logging.info('Remuxing.')
+        if subprocess.check_call(cmd, cwd=transcode.encode_dir,
+                                 stdout=transcode.pipe_output,
+                                 stderr=transcode.pipe_output,
+                                 preexec_fn=lambda : os.nice(transcode.nice_lvl)
+                                 ) == 0:
             with open(new_file) as f: pass
             return new_file
 #transcode('/media/Motherload/newVideoTest/21.mkv')
 #exit()
-transcode('/media/Motherload/newVideoTest1/')
+transcode('/media/Motherload/2-renamed/')
 #transcode('/media/Motherload/2-video_processing/')
 #transcode('/media/Motherload/fucked/')
