@@ -5,7 +5,7 @@
 #    
 #    @author     David Lasley, dave -at- dlasley -dot- net
 #    @package    batch-transcode
-#    @version    $Id: transcode.py 5 2013-01-24 21:50:50Z dave@dlasley.net $
+#    @version    $Id$
 
 import threading
 import re
