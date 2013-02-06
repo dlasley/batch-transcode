@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 ##  Transcode
 #         
 #    Video transcoding class
@@ -23,7 +23,7 @@ class transcode:
         'demux'     :   False,
         'transcode' :   False,
         'remux'     :   False,
-        'dont_delete':  False,
+        'dont_delete':  True,
     } 
     nice_lvl        =   19 
     pipe_output     =   open('/tmp/transcode.out','w')
@@ -501,6 +501,6 @@ class transcode:
             return new_file
 #transcode('/media/Motherload/newVideoTest/21.mkv')
 #exit()
-transcode('/media/Motherload/2-renamed/')
+#transcode('/media/Motherload/2-renamed/')
 #transcode('/media/Motherload/2-video_processing/')
 #transcode('/media/Motherload/fucked/')
