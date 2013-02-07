@@ -26,7 +26,7 @@ class transcode(object):
         'dont_delete':  True,
     } 
     nice_lvl        =   19 
-    pipe_output     =   open('C:\\crap_i_cant_delete\\transcode.out','w')#open('/tmp/transcode.out','w')
+    pipe_output     =   open('/tmp/transcode.out','w')#open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
     lng_codes_doc   =   os.path.join(os.path.dirname(os.path.realpath(__file__)),'lng_codes.txt')
