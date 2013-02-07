@@ -18,7 +18,7 @@ from pprint import pprint
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-class transcode:
+class transcode(object):
     dry_runs        =   {
         'demux'     :   False,
         'transcode' :   False,
@@ -26,7 +26,7 @@ class transcode:
         'dont_delete':  True,
     } 
     nice_lvl        =   19 
-    pipe_output     =   open('/tmp/transcode.out','w')
+    pipe_output     =   open('C:\\crap_i_cant_delete\\transcode.out','w')#open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
     lng_codes_doc   =   os.path.join(os.path.dirname(os.path.realpath(__file__)),'lng_codes.txt')
@@ -73,19 +73,18 @@ class transcode:
     vid_exts        =   ['.mkv','.m4v','.mp4','.mpg','.avi']
     native_language =   ('English','eng')
     THREADS = 1
-    def __init__(self,indir,outdir,debug=False):
-        if not os.path.isdir(self.out_dir):
+    def __init__(self,out_dir,debug=False):
+        self.out_dir = out_dir
+        self.encode_dir      =   '%sencodeBox/' % out_dir
+        self.finished_dir    =   '%sfinished/' % out_dir
+        if not os.path.isdir(out_dir):
             os.mkdir(self.out_dir, self.dir_permissions)
         if not os.path.isdir(self.encode_dir):
             os.mkdir(self.encode_dir, self.dir_permissions)
         if not os.path.isdir(self.finished_dir):
             os.mkdir(self.finished_dir, self.dir_permissions)
-        self.encode_dir      =   '%sencodeBox/' % out_dir
-        self.finished_dir    =   '%sfinished/' % out_dir
         self.__debug = debug
-        self.encode_directory(indir)
         self.cleanup_files = []
-        #self.encode_it(indir,'d')
 
     def encode_directory(self,inpath):
         '''
@@ -98,7 +97,7 @@ class transcode:
         self.new_files = []
         self.worker_threads = {}
         def thread(root,new_root,file_name,extension,transcode_settings):
-            self.new_files.append( self.encode_it(os.path.join(root,'%s%s'%(file_name,extension)), os.path.join(new_root, file_name, extension),transcode_settings) )
+            self.new_files.append( self.encode_it(os.path.join(root,'%s%s'%(file_name,extension)), os.path.join(new_root, '%s%s'%(file_name,extension)),transcode_settings) )
             del self.worker_threads[file_name]
             if True not in self.dry_runs:   #<  Delete the file if not testing or specified
                 os.unlink(os.path.join(root,file_name,extension))
@@ -146,7 +145,7 @@ class transcode:
         for row in doc.read().split('\n'):
             cols = row.split('|')
             lng_codes[cols[3]] = cols[0]
-        demuxed = self.demux(file_path,media_info,dry_run=self.dry_runs['demux'])
+        demuxed = self.demux(file_path,media_info,self.encode_dir,dry_run=self.dry_runs['demux'])
         cleanup_files.extend(demuxed)
         duped = self.compare_tracks(demuxed)
         #media_info['tracks'][i+1]   :   mux_files[i]
@@ -155,7 +154,7 @@ class transcode:
                 file_path,
                 '%s%s-trans.%s' % (
                     self.encode_dir,
-                    threading.currentThread().getName().encode('utf-8'),
+                    os.path.basename(file_path),
                     self.transcode_settings['container']
                 ),
                 media_info['tracks'][vid_id],
@@ -368,7 +367,7 @@ class transcode:
         return {'tracks':tracks,'id_maps':track_types}
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
-        cmd = [u'avconv', u'-i', unicode('"'+old_file+'"', "utf-8"), u'-passlogfile' , u'"'+threading.currentThread().getName().encode('utf-8')+u'"' ]
+        cmd = [u'avconv', u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+os.path.basename(old_file)+'.log"' ]
         transcode_settings = transcode.transcode_settings
         height = int(media_info['Height'].replace(' pixels','').replace(' ',''))
         width = int(media_info['Width'].replace(' pixels','').replace(' ',''))
@@ -401,7 +400,7 @@ class transcode:
             cmd.append('-vf yadif')
         first_cmd = cmd[:]
         first_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', u'/dev/null'] )
-        cmd.extend([u'-pass', u'2', unicode('"'+new_file+'"', "utf-8")])
+        cmd.extend([u'-pass', u'2', '"'+new_file+'"'])
         logging.debug( '%s %s' % (first_cmd, cmd))
         logging.info('Transcoding.')
         if dry_run:
@@ -409,14 +408,14 @@ class transcode:
         else:
             if subprocess.check_call(
                 [unicode(' ').join(first_cmd)],
-                shell=True, cwd=transcode.encode_dir,
+                shell=True, cwd=os.path.dirname(new_file),
                 stdout=transcode.pipe_output,
                 stderr=transcode.pipe_output,
                 preexec_fn=lambda : os.nice(transcode.nice_lvl)
             ) == 0:
                 if subprocess.check_call(
                     [unicode(' ').join(cmd)],
-                    shell=True, cwd=transcode.encode_dir,
+                    shell=True, cwd=os.path.dirname(new_file),
                     stdout=transcode.pipe_output,
                     stderr=transcode.pipe_output,
                     preexec_fn=lambda : os.nice(transcode.nice_lvl)
@@ -427,7 +426,7 @@ class transcode:
         return '-s %sX%s -vf crop=%s:%s:0:%s' % (width,height,width,height-(height*.25),height*.125)
     
     @staticmethod
-    def demux(file_path, media_info, dry_run=False):
+    def demux(file_path, media_info, out_path, dry_run=False):
         '''
             Demux file
             
@@ -436,12 +435,12 @@ class transcode:
             
             @return List    List of extracted tracks
         '''
-        cmd = [u'mkvextract', u'tracks', unicode(file_path, "utf-8")]
+        cmd = [u'mkvextract', u'tracks', file_path]
         demuxed = []
         for track in media_info['tracks']:
             try:
-                cmd.append(u'%s:%s%s%s.%s'%(track['ID'],transcode.encode_dir,threading.currentThread().getName().encode('utf-8'),track['ID'],track['extension']))
-                demuxed.append(u'%s%s%s.%s'%(transcode.encode_dir,threading.currentThread().getName().encode('utf-8'),track['ID'],track['extension']))
+                cmd.append(u'%s:%s%s%s.%s'%(track['ID'],out_path,os.path.basename(file_path),track['ID'],track['extension']))
+                demuxed.append(u'%s%s%s.%s'%(out_path,os.path.basename(file_path),track['ID'],track['extension']))
             except KeyError:
                 pass
         logging.debug( cmd )
@@ -449,7 +448,7 @@ class transcode:
         if dry_run:
             return demuxed
         else:
-            if subprocess.check_call(cmd, cwd=transcode.encode_dir,
+            if subprocess.check_call(cmd, cwd=out_path,
                                      stdout=transcode.pipe_output,
                                      stderr=transcode.pipe_output,
                                      preexec_fn=lambda : os.nice(transcode.nice_lvl)
@@ -492,7 +491,7 @@ class transcode:
                     cmd.extend( [u'--language', u'0:%s' % lng_codes[media_info['tracks'][i+1]['Language']], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
-        if subprocess.check_call(cmd, cwd=transcode.encode_dir,
+        if subprocess.check_call(cmd, cwd=os.path.dirname(mux_files[0]),
                                  stdout=transcode.pipe_output,
                                  stderr=transcode.pipe_output,
                                  preexec_fn=lambda : os.nice(transcode.nice_lvl)
