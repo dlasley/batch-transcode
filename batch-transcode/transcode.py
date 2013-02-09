@@ -14,7 +14,21 @@ import os
 import subprocess
 import time
 import logging
+import hashlib
 from pprint import pprint
+
+FFMPEG_LOCATION = os.path.join('Z:','Programs','Windows','libav-win64-20130207','usr','bin','avconv.exe')
+MKVTOOLNIX_DIR = os.path.join('Z:','Programs','Windows','mkvtoolnix')
+MKVMERGE_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvmerge.exe')
+MKVEXTRACT_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvextract.exe')
+MEDIAINFO_PATH = os.path.join('Z:','Programs','Windows','mediainfo','MediaInfo.exe')
+DEV_NULL = u'NUL'
+if not os.path.exists(FFMPEG_LOCATION):
+    FFMPEG_LOCATION = 'avconv'
+    MKVMERGE_PATH = 'mkvmerge'
+    MKVEXTRACT_PATH = 'mkvextract'
+    MEDIAINFO_PATH = 'mediainfo'
+    DEV_NULL = u'/dev/null'
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
@@ -26,7 +40,7 @@ class transcode(object):
         'dont_delete':  True,
     } 
     nice_lvl        =   19 
-    pipe_output     =   open('/tmp/transcode.out','w')#open('/tmp/transcode.out','w')
+    pipe_output     =   open('./transcode.out','w')#open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
     lng_codes_doc   =   os.path.join(os.path.dirname(os.path.realpath(__file__)),'lng_codes.txt')
@@ -75,8 +89,8 @@ class transcode(object):
     THREADS = 1
     def __init__(self,out_dir,debug=False):
         self.out_dir = out_dir
-        self.encode_dir      =   '%sencodeBox/' % out_dir
-        self.finished_dir    =   '%sfinished/' % out_dir
+        self.encode_dir      =   os.path.join(out_dir,'encodeBox/')
+        self.finished_dir    =   os.path.join(out_dir,'finished/')
         if not os.path.isdir(out_dir):
             os.mkdir(self.out_dir, self.dir_permissions)
         if not os.path.isdir(self.encode_dir):
@@ -170,7 +184,18 @@ class transcode(object):
             except OSError:
                 logging.error('Could not delete %s' % cleanup_file)
         return new_file
+    
     '''     Static Methods      '''
+    @staticmethod
+    def md5_sum(file_path):
+        fh = open(file_path, 'rb')
+        m = hashlib.md5()
+        while True:
+            data = fh.read(8192)
+            if not data:
+                break
+            m.update(data)
+        return m.hexdigest()
     @staticmethod
     def parse_video_settings(file_path):
         transcode_settings = {}
@@ -211,7 +236,7 @@ class transcode(object):
             if len(tracks[1]) != 1:
                 md5s = []
                 for track in tracks[1]:
-                    md5 = subprocess.check_output(['md5sum', track],preexec_fn=lambda : os.nice(transcode.nice_lvl)).split(' ')
+                    md5 = transcode.md5_sum(track)
                     if md5 not in md5s:
                         md5s.append(md5)
                     else:
@@ -287,7 +312,7 @@ class transcode(object):
             @return Dict    {MKVMerge_TrackID}{number,uid,codec_id,..}
         '''
         info_regex = re.compile('Track ID ([0-9]{1,2}): (\w+) \((.+)\) \[(([\w/]+:[\w/\+]+ ?)*)\]')
-        info = subprocess.check_output( [ 'mkvmerge', '--identify-verbose', file_path ] )
+        info = subprocess.check_output( [ MKVMERGE_PATH, '--identify-verbose', file_path ] )
         info_out = {}
         for match in info_regex.finditer(info):
             #   1-Track Id, 2-Track Type, 3-Codec ID, 4-Verbose Attrs
@@ -319,7 +344,7 @@ class transcode(object):
         '''
         dom = xml.dom.minidom.parseString(
             subprocess.check_output(
-                ['mediainfo', '--Output=XML', '%s' % file_path],
+                [MEDIAINFO_PATH, '--Output=XML', '%s' % file_path],
                 preexec_fn=lambda : os.nice(transcode.nice_lvl)
             )
         )
@@ -367,7 +392,7 @@ class transcode(object):
         return {'tracks':tracks,'id_maps':track_types}
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
-        cmd = [u'avconv', u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+os.path.basename(old_file)+'.log"' ]
+        cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+os.path.basename(old_file)+'.log"' ]
         transcode_settings = transcode.transcode_settings
         height = int(media_info['Height'].replace(' pixels','').replace(' ',''))
         width = int(media_info['Width'].replace(' pixels','').replace(' ',''))
@@ -399,7 +424,7 @@ class transcode(object):
         if transcode_settings['deinterlace']:
             cmd.append('-vf yadif')
         first_cmd = cmd[:]
-        first_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', u'/dev/null'] )
+        first_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', DEV_NULL] )
         cmd.extend([u'-pass', u'2', '"'+new_file+'"'])
         logging.debug( '%s %s' % (first_cmd, cmd))
         logging.info('Transcoding.')
@@ -435,7 +460,7 @@ class transcode(object):
             
             @return List    List of extracted tracks
         '''
-        cmd = [u'mkvextract', u'tracks', file_path]
+        cmd = [MKVEXTRACT_PATH, u'tracks', file_path]
         demuxed = []
         for track in media_info['tracks']:
             try:
@@ -469,7 +494,7 @@ class transcode(object):
             movie_name = media_info['tracks'][0]['Movie_name']
         except KeyError:
             movie_name = new_file.rsplit('/',3).pop(2)
-        cmd = [u'mkvmerge', u'-o', unicode(new_file, "utf-8"), u'--title', u"%s" % movie_name]
+        cmd = [MKVMERGE_PATH, u'-o', unicode(new_file, "utf-8"), u'--title', u"%s" % movie_name]
         if track_order:
             default_tracks = []
             for track_id in track_order:
