@@ -14,21 +14,29 @@ import os
 import subprocess
 import time
 import logging
+import math
 import hashlib
 from pprint import pprint
-
-FFMPEG_LOCATION = os.path.join('Z:','Programs','Windows','libav-win64-20130207','usr','bin','avconv.exe')
-MKVTOOLNIX_DIR = os.path.join('Z:','Programs','Windows','mkvtoolnix')
-MKVMERGE_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvmerge.exe')
-MKVEXTRACT_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvextract.exe')
-MEDIAINFO_PATH = os.path.join('Z:','Programs','Windows','mediainfo','MediaInfo.exe')
-DEV_NULL = u'NUL'
-if not os.path.exists(FFMPEG_LOCATION):
+if os.name == 'nt':
+    import win32api,win32process,win32con
+    NICE_LVL = 0
+    FFMPEG_LOCATION = os.path.join('Z:\\','Programs','Windows','ffmpeg-20130205-git-c2dd5a1-win64-shared','bin','ffmpeg.exe')
+    MKVTOOLNIX_DIR = os.path.join('Z:\\','Programs','Windows','mkvtoolnix')
+    MKVMERGE_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvmerge.exe')
+    MKVEXTRACT_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvextract.exe')
+    MEDIAINFO_PATH = os.path.join('Z:\\','Programs','Windows','mediainfo','MediaInfo.exe')
+    DEV_NULL = u'NUL'
+    WINDOWS = True
+else:
+    #import psutil #< For ionice @todo
+    #IO_NICE = 3 #< Idle
+    NICE_LVL = 19
     FFMPEG_LOCATION = 'avconv'
     MKVMERGE_PATH = 'mkvmerge'
     MKVEXTRACT_PATH = 'mkvextract'
     MEDIAINFO_PATH = 'mediainfo'
     DEV_NULL = u'/dev/null'
+    WINDOWS = False
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
@@ -39,11 +47,8 @@ class transcode(object):
         'remux'     :   False,
         'dont_delete':  True,
     } 
-    nice_lvl        =   19 
-    pipe_output     =   open('./transcode.out','w')#open('/tmp/transcode.out','w')
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
-    lng_codes_doc   =   os.path.join(os.path.dirname(os.path.realpath(__file__)),'lng_codes.txt')
     settings_file = 'video_settings.xml'
     transcode_settings = {
         'x264'      :   {
@@ -89,8 +94,8 @@ class transcode(object):
     THREADS = 1
     def __init__(self,out_dir,debug=False):
         self.out_dir = out_dir
-        self.encode_dir      =   os.path.join(out_dir,'encodeBox/')
-        self.finished_dir    =   os.path.join(out_dir,'finished/')
+        self.encode_dir      =   os.path.join(out_dir,'encodeBox')
+        self.finished_dir    =   os.path.join(out_dir,'finished')
         if not os.path.isdir(out_dir):
             os.mkdir(self.out_dir, self.dir_permissions)
         if not os.path.isdir(self.encode_dir):
@@ -154,11 +159,8 @@ class transcode(object):
             @return String  Out file
         '''
         media_info = self.media_info(file_path)
-        cleanup_files, lng_codes = [],{}
-        doc = open(self.lng_codes_doc,'r')
-        for row in doc.read().split('\n'):
-            cols = row.split('|')
-            lng_codes[cols[3]] = cols[0]
+        cleanup_files = []
+        lng_codes = transcode.lng_codes()
         demuxed = self.demux(file_path,media_info,self.encode_dir,dry_run=self.dry_runs['demux'])
         cleanup_files.extend(demuxed)
         duped = self.compare_tracks(demuxed)
@@ -166,17 +168,24 @@ class transcode(object):
         for vid_id in media_info['id_maps']['Video']:
             demuxed[vid_id-1] = self.transcode(
                 file_path,
-                '%s%s-trans.%s' % (
+                os.path.join(
                     self.encode_dir,
-                    os.path.basename(file_path),
-                    self.transcode_settings['container']
+                    u'%s.%s'%(os.path.basename(file_path),
+                              self.transcode_settings['container'])
                 ),
                 media_info['tracks'][vid_id],
                 dry_run=self.dry_runs['transcode']
             )
             cleanup_files.append(demuxed[vid_id-1])
+            logging.debug('Transcoded %s' % demuxed[vid_id-1])
         track_order = self.choose_track_order(media_info)
-        new_file = transcode.remux(demuxed,media_info,lng_codes,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
+        logging.debug('Track Order Chosen!')
+        try:
+            new_file = transcode.remux(demuxed,media_info,lng_codes,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
+        except Exception as e:
+            logging.error(repr(e))
+            raise Exception('der')
+        logging.debug('New File Success %s' % new_file)
         for cleanup_file in cleanup_files:
             try:
                 logging.debug( 'Removing %s' % cleanup_file)
@@ -186,6 +195,57 @@ class transcode(object):
         return new_file
     
     '''     Static Methods      '''
+    @staticmethod
+    def lng_codes():
+        mkvmerge_lng_codes = subprocess.check_output([MKVMERGE_PATH, '--list-languages'])
+        lng_codes = {}
+        for row in mkvmerge_lng_codes.split('\n'):
+            cols = row.split('|')
+            try:
+                lng_codes[cols[0].strip()] = cols[1].strip()
+            except IndexError:
+                pass
+        logging.debug(repr(lng_codes))
+        return lng_codes
+    
+    @staticmethod
+    def command_with_priority(command,shell=False,cwd='./'):
+        ##  Runs a command using subprocess. Sets the priority.
+        #   @param  List    command Command to execute
+        #   @param  Bool    shell   Use shell
+        #   @param  Str     cwd     Current working directory
+        #   @return Tuple   (returncode, stdoutdata, stderrdata)
+        if WINDOWS:
+            process = subprocess.Popen(command,shell=shell,cwd=cwd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    )
+            """ http://code.activestate.com/recipes/496767/ """
+            priorityclasses = [win32process.IDLE_PRIORITY_CLASS,
+                               win32process.BELOW_NORMAL_PRIORITY_CLASS,
+                               win32process.NORMAL_PRIORITY_CLASS,
+                               win32process.ABOVE_NORMAL_PRIORITY_CLASS,
+                               win32process.HIGH_PRIORITY_CLASS,
+                               win32process.REALTIME_PRIORITY_CLASS]
+            handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, process.pid)
+            win32process.SetPriorityClass(handle, priorityclasses[NICE_LVL])
+        else:
+            #def set_nices():#< @todo
+            #    os.nice(NICE_LVL)
+            #    p = psutil.Process(os.getpid())
+            #    priorityclasses = [ psutil.IO
+            #    p.set_ionice(psutil.IOPRIO_CLASS_IDLE)
+            process = subprocess.Popen(
+                command, shell=shell, cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=lambda : os.nice(NICE_LVL)
+            )
+        communicate_return = process.communicate()
+        if process.returncode != 0:
+            logging.error('Command returned an error!\n\n%s\n\n%s\n\n' % (str(command), str(communicate_return)))
+        return (process.returncode,communicate_return[0],communicate_return[1])
+
     @staticmethod
     def md5_sum(file_path):
         fh = open(file_path, 'rb')
@@ -312,7 +372,7 @@ class transcode(object):
             @return Dict    {MKVMerge_TrackID}{number,uid,codec_id,..}
         '''
         info_regex = re.compile('Track ID ([0-9]{1,2}): (\w+) \((.+)\) \[(([\w/]+:[\w/\+]+ ?)*)\]')
-        info = subprocess.check_output( [ MKVMERGE_PATH, '--identify-verbose', file_path ] )
+        info = transcode.command_with_priority( [ MKVMERGE_PATH, '--identify-verbose', file_path ] )[1]
         info_out = {}
         for match in info_regex.finditer(info):
             #   1-Track Id, 2-Track Type, 3-Codec ID, 4-Verbose Attrs
@@ -343,10 +403,9 @@ class transcode(object):
             @return Dict    {tracks:[],id_maps{type:[]}} multi dimensional awesomeness
         '''
         dom = xml.dom.minidom.parseString(
-            subprocess.check_output(
+            transcode.command_with_priority(
                 [MEDIAINFO_PATH, '--Output=XML', '%s' % file_path],
-                preexec_fn=lambda : os.nice(transcode.nice_lvl)
-            )
+            )[1]
         )
         tracks,track_types = [],{}
         for track in dom.getElementsByTagName('track'):
@@ -392,7 +451,9 @@ class transcode(object):
         return {'tracks':tracks,'id_maps':track_types}
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
-        cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+os.path.basename(old_file)+'.log"' ]
+        log_file = os.path.basename(old_file)+'.log"'
+        cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+log_file ]
+        win_cmd = [FFMPEG_LOCATION, u'-i', old_file, u'-passlogfile' , log_file ]
         transcode_settings = transcode.transcode_settings
         height = int(media_info['Height'].replace(' pixels','').replace(' ',''))
         width = int(media_info['Width'].replace(' pixels','').replace(' ',''))
@@ -409,8 +470,10 @@ class transcode(object):
         for setting_name,setting_value in transcode_settings['avconv'].iteritems():
             if setting_value:
                 cmd.append(u'-%s' % setting_name)
+                win_cmd.append(u'-%s' % setting_name)
                 if not setting_value == True:
                     cmd.append(unicode(setting_value))
+                    win_cmd.append(unicode(setting_value))
                 #cmd.append(' '.join(new_cmd))
         ''' @todo   x264 settings passthru   '''
         #for setting_name,setting_value in transcode_settings['x264'].iteritems():
@@ -421,34 +484,49 @@ class transcode(object):
         #        cmd.append(' '.join(new_cmd))
         if transcode_settings['fix_dvds']:
             cmd.append(transcode.fix_dvds_cmd(height,width))
+            win_cmd.append(transcode.fix_dvds_cmd(height,width))
         if transcode_settings['deinterlace']:
             cmd.append('-vf yadif')
+            win_cmd.append('-vf yadif')
         first_cmd = cmd[:]
+        first_win_cmd = win_cmd[:]
         first_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', DEV_NULL] )
+        first_win_cmd.extend( [u'-pass', u'1', u'-f', u'rawvideo', u'-y', DEV_NULL] )
         cmd.extend([u'-pass', u'2', '"'+new_file+'"'])
+        win_cmd.extend([u'-pass', u'2', '"'+new_file+'"'])
         logging.debug( '%s %s' % (first_cmd, cmd))
-        logging.info('Transcoding.')
+        logging.info('Transcoding (1st Pass).')
         if dry_run:
             return new_file
         else:
-            if subprocess.check_call(
-                [unicode(' ').join(first_cmd)],
-                shell=True, cwd=os.path.dirname(new_file),
-                stdout=transcode.pipe_output,
-                stderr=transcode.pipe_output,
-                preexec_fn=lambda : os.nice(transcode.nice_lvl)
-            ) == 0:
-                if subprocess.check_call(
-                    [unicode(' ').join(cmd)],
+            cwd = os.path.dirname(new_file)
+            if WINDOWS:
+                if transcode.command_with_priority(
+                    first_win_cmd, cwd=cwd
+                    #shell=True, cwd=os.path.dirname(new_file),
+                )[0] == 0: #< 1st pass success
+                    logging.info('Transcoding (2nd Pass).')
+                    if transcode.command_with_priority(
+                        win_cmd, cwd=cwd
+                        #shell=True, cwd=os.path.dirname(new_file),
+                    )[0] == 0: #< 2nd pass success
+                        return new_file
+            else:
+                if transcode.command_with_priority(
+                    [unicode(' ').join(first_cmd)],
                     shell=True, cwd=os.path.dirname(new_file),
-                    stdout=transcode.pipe_output,
-                    stderr=transcode.pipe_output,
-                    preexec_fn=lambda : os.nice(transcode.nice_lvl)
-                ) == 0:
-                    return new_file
+                )[0] == 0: #< 1st pass success
+                    logging.info('Transcoding (2nd Pass).')
+                    if transcode.command_with_priority(
+                        [unicode(' ').join(cmd)],
+                        shell=True, cwd=os.path.dirname(new_file),
+                    )[0] == 0: #< 2nd pass success
+                        return new_file
     @staticmethod
     def fix_dvds_cmd(height,width):
-        return '-s %sX%s -vf crop=%s:%s:0:%s' % (width,height,width,height-(height*.25),height*.125)
+        return '-s %sX%s -vf crop=%s:%s:0:%s' % (width,height,width,
+                                                 height-(height*.25),
+                                                 height*.125)
     
     @staticmethod
     def demux(file_path, media_info, out_path, dry_run=False):
@@ -464,8 +542,13 @@ class transcode(object):
         demuxed = []
         for track in media_info['tracks']:
             try:
-                cmd.append(u'%s:%s%s%s.%s'%(track['ID'],out_path,os.path.basename(file_path),track['ID'],track['extension']))
-                demuxed.append(u'%s%s%s.%s'%(out_path,os.path.basename(file_path),track['ID'],track['extension']))
+                cmd.append(u'%s:%s'%(track['ID'],
+                                     os.path.join(track['ID'],out_path,
+                                            u'%s%s.%s'%(os.path.basename(file_path),
+                                                        track['ID'],track['extension']))))
+                demuxed.append(os.path.join(out_path,
+                                            u'%s%s.%s'%(os.path.basename(file_path),
+                                                        track['ID'],track['extension'])))
             except KeyError:
                 pass
         logging.debug( cmd )
@@ -473,11 +556,7 @@ class transcode(object):
         if dry_run:
             return demuxed
         else:
-            if subprocess.check_call(cmd, cwd=out_path,
-                                     stdout=transcode.pipe_output,
-                                     stderr=transcode.pipe_output,
-                                     preexec_fn=lambda : os.nice(transcode.nice_lvl)
-                                     ) == 0:
+            if transcode.command_with_priority(cmd, cwd=out_path)[0] == 0:
                 return demuxed
     @staticmethod
     def remux(mux_files,media_info,lng_codes,new_file,dups=[],track_order=False,dry_run=False):
@@ -490,12 +569,15 @@ class transcode(object):
             
             @return String  New file path
         '''
+        logging.debug('In Remux')
         try:
             movie_name = media_info['tracks'][0]['Movie_name']
         except KeyError:
-            movie_name = new_file.rsplit('/',3).pop(2)
-        cmd = [MKVMERGE_PATH, u'-o', unicode(new_file, "utf-8"), u'--title', u"%s" % movie_name]
+            movie_name = new_file.rsplit(os.path.sep,3).pop(2)
+        cmd = [MKVMERGE_PATH, u'-o', new_file, u'--title', u"%s" % movie_name]
+        #cwd = os.path.dirname(mux_files[0])
         if track_order:
+            logging.debug('In Track Order')
             default_tracks = []
             for track_id in track_order:
                 track_type = media_info['tracks'][track_id]['track_type'].lower()
@@ -516,13 +598,10 @@ class transcode(object):
                     cmd.extend( [u'--language', u'0:%s' % lng_codes[media_info['tracks'][i+1]['Language']], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
-        if subprocess.check_call(cmd, cwd=os.path.dirname(mux_files[0]),
-                                 stdout=transcode.pipe_output,
-                                 stderr=transcode.pipe_output,
-                                 preexec_fn=lambda : os.nice(transcode.nice_lvl)
-                                 ) == 0:
-            with open(new_file) as f: pass
+        if transcode.command_with_priority(cmd)[0] == 0:
+            with open(new_file) as f: pass #< Validate file exists
             return new_file
+        
 #transcode('/media/Motherload/newVideoTest/21.mkv')
 #exit()
 #transcode('/media/Motherload/2-renamed/')
