@@ -16,11 +16,11 @@ import time
 import logging
 import math
 import hashlib
-from pprint import pprint
+
 if os.name == 'nt':
     import win32api,win32process,win32con
     NICE_LVL = 0
-    FFMPEG_LOCATION = os.path.join('Z:\\','Programs','Windows','ffmpeg-20130205-git-c2dd5a1-win64-shared','bin','ffmpeg.exe')
+    FFMPEG_LOCATION = os.path.join('Z:\\','Programs','Windows','ffmpeg-20130205-git-c2dd5a1-win64-static','bin','ffmpeg.exe')
     MKVTOOLNIX_DIR = os.path.join('Z:\\','Programs','Windows','mkvtoolnix')
     MKVMERGE_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvmerge.exe')
     MKVEXTRACT_PATH = os.path.join(MKVTOOLNIX_DIR,'mkvextract.exe')
@@ -28,8 +28,7 @@ if os.name == 'nt':
     DEV_NULL = u'NUL'
     WINDOWS = True
 else:
-    #import psutil #< For ionice @todo
-    #IO_NICE = 3 #< Idle
+    #IO_NICE = 3 #< @todo #17
     NICE_LVL = 19
     FFMPEG_LOCATION = 'avconv'
     MKVMERGE_PATH = 'mkvmerge'
@@ -45,7 +44,7 @@ class transcode(object):
         'demux'     :   False,
         'transcode' :   False,
         'remux'     :   False,
-        'dont_delete':  True,
+        'dont_delete':  False,
     } 
     dir_permissions =   0777
     track_type_order=   ('Video','Audio','Text')
@@ -202,9 +201,11 @@ class transcode(object):
         for row in mkvmerge_lng_codes.split('\n'):
             cols = row.split('|')
             try:
-                lng_codes[cols[0].strip()] = cols[1].strip()
+                short_code = cols[1].strip()
             except IndexError:
-                pass
+                continue #< next iteration
+            for long_code in cols[0].split('; '): #< Handle multiple long codes
+                lng_codes[long_code.strip()] = short_code
         logging.debug(repr(lng_codes))
         return lng_codes
     
