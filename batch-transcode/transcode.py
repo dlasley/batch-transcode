@@ -180,7 +180,7 @@ class transcode(object):
         track_order = self.choose_track_order(media_info)
         logging.debug('Track Order Chosen!')
         try:
-            new_file = transcode.remux(demuxed,media_info,lng_codes,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
+            new_file = transcode.remux(demuxed,media_info,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
         except Exception as e:
             logging.error(repr(e))
             raise Exception('der')
@@ -196,16 +196,16 @@ class transcode(object):
     '''     Static Methods      '''
     @staticmethod
     def lng_codes():
+        ##  Returns Available Language Codes    @deprecated
+        #   @return Dict    Language Codes, { short_code : long_code }
         mkvmerge_lng_codes = subprocess.check_output([MKVMERGE_PATH, '--list-languages'])
         lng_codes = {}
         for row in mkvmerge_lng_codes.split('\n'):
             cols = row.split('|')
             try:
-                short_code = cols[1].strip()
+                lng_codes[cols[1].strip()] = cols[0].strip()
             except IndexError:
                 continue #< next iteration
-            for long_code in cols[0].split('; '): #< Handle multiple long codes
-                lng_codes[long_code.strip()] = short_code
         logging.debug(repr(lng_codes))
         return lng_codes
     
@@ -405,7 +405,7 @@ class transcode(object):
         '''
         dom = xml.dom.minidom.parseString(
             transcode.command_with_priority(
-                [MEDIAINFO_PATH, '--Output=XML', '%s' % file_path],
+                [MEDIAINFO_PATH, '--Output=XML', '-f', '%s' % file_path],
             )[1]
         )
         tracks,track_types = [],{}
@@ -560,13 +560,16 @@ class transcode(object):
             if transcode.command_with_priority(cmd, cwd=out_path)[0] == 0:
                 return demuxed
     @staticmethod
-    def remux(mux_files,media_info,lng_codes,new_file,dups=[],track_order=False,dry_run=False):
+    def remux(mux_files,media_info,new_file,dups=[],track_order=False,dry_run=False):
         '''
             Remux
             
             @param  List    mux_files   List of demuxed files
             @param  Dict    media_info  As returned by self.media_info
-            @param  Dict    lng_codes   Language codes- englishName=key, ISO639-2=value
+            @param  Str     new_file    New file path
+            @param  List    dups        Output from transcode.compare_tracks()
+            @param  List    track_order List of track order (transcode.choose_track_order())
+            @param  Bool    dry_run     Testing? 
             
             @return String  New file path
         '''
@@ -583,11 +586,11 @@ class transcode(object):
             for track_id in track_order:
                 track_type = media_info['tracks'][track_id]['track_type'].lower()
                 __track_id = '1' if track_type == 'Video' else '0'
-                cmd.extend( [u'--language', u'%s:%s' % (__track_id,lng_codes[media_info['tracks'][track_id]['Language']]) ] )
+                cmd.extend( [u'--language', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['language']) ] )
                 try:
                     cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['Title'])])
                 except KeyError:
-                    cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['Language'])])
+                    cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['language'])])
                 if track_type not in default_tracks:
                     cmd.extend([u'--default-track', u'%s:yes' % __track_id])
                     default_tracks.append(track_type)
@@ -596,7 +599,7 @@ class transcode(object):
             for i in xrange(0,len(mux_files)):
                 #   media_info['tracks'][i+1]   :   mux_files[i]
                 if mux_files[i] not in dups:
-                    cmd.extend( [u'--language', u'0:%s' % lng_codes[media_info['tracks'][i+1]['Language']], u'%s' % mux_files[i] ] )
+                    cmd.extend( [u'--language', u'0:%s' % media_info['tracks'][i+1]['language'], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
         if transcode.command_with_priority(cmd)[0] == 0:
