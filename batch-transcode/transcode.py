@@ -457,6 +457,7 @@ class transcode(object):
         except KeyError:
             raise Exception( 'media_info len(track_types[Video]>1) \r\n%s\r\n%s\r\n%s' % (tracks,track_types,file_path) ) 
         return {'tracks':tracks,'id_maps':track_types}
+    
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
         log_file = os.path.basename(old_file)+'.log'
