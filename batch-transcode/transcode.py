@@ -459,8 +459,9 @@ class transcode(object):
         return {'tracks':tracks,'id_maps':track_types}
     @staticmethod
     def transcode(old_file,new_file,media_info,new_settings={},dry_run=False):
-        log_file = os.path.basename(old_file)+'.log"'
-        cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+log_file ]
+        log_file = os.path.basename(old_file)+'.log'
+        self.cleanup_files.append(log_file) #< Fix #21
+        cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+log_file+'"' ]
         win_cmd = [FFMPEG_LOCATION, u'-i', old_file, u'-passlogfile' , log_file ]
         transcode_settings = transcode.transcode_settings
         height = int(media_info['Height'].replace(' pixels','').replace(' ',''))
