@@ -188,7 +188,7 @@ class transcode(object):
             logging.error(repr(e))
             #   Implement #20
             fh = open(self.log_file, 'a')
-            fh.write('%s\n' % repr(e))
+            fh.write( repr(e) + "\n" ) 
             fh.close()
         
         #   Delete leftover files
