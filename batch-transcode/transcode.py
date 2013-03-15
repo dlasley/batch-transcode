@@ -93,14 +93,15 @@ class transcode(object):
     THREADS = 1
     def __init__(self,out_dir,debug=False):
         self.out_dir = out_dir
+        #   Generate the dirs
         self.encode_dir      =   os.path.join(out_dir,'encodeBox')
         self.finished_dir    =   os.path.join(out_dir,'finished')
-        if not os.path.isdir(out_dir):
-            os.mkdir(self.out_dir, self.dir_permissions)
-        if not os.path.isdir(self.encode_dir):
-            os.mkdir(self.encode_dir, self.dir_permissions)
-        if not os.path.isdir(self.finished_dir):
-            os.mkdir(self.finished_dir, self.dir_permissions)
+        self.error_dir       =   os.path.join(out_dir,'errored')
+        self.log_file        =   os.path.join(self.error_dir,'error_log.log')
+        for i in (self.encode_dir,self.finished_dir,self.error_dir):
+            if not os.path.isdir(out_dir):
+                os.mkdir(i, self.dir_permissions)
+
         self.__debug = debug
         self.cleanup_files = []
 
@@ -157,34 +158,40 @@ class transcode(object):
             
             @return String  Out file
         '''
-        media_info = self.media_info(file_path)
-        cleanup_files = []
-        lng_codes = transcode.lng_codes()
-        demuxed = self.demux(file_path,media_info,self.encode_dir,dry_run=self.dry_runs['demux'])
-        cleanup_files.extend(demuxed)
-        duped = self.compare_tracks(demuxed)
-        #media_info['tracks'][i+1]   :   mux_files[i]
-        for vid_id in media_info['id_maps']['Video']:
-            demuxed[vid_id-1] = self.transcode(
-                file_path,
-                os.path.join(
-                    self.encode_dir,
-                    u'%s.%s'%(os.path.basename(file_path),
-                              self.transcode_settings['container'])
-                ),
-                media_info['tracks'][vid_id],
-                dry_run=self.dry_runs['transcode']
-            )
-            cleanup_files.append(demuxed[vid_id-1])
-            logging.debug('Transcoded %s' % demuxed[vid_id-1])
-        track_order = self.choose_track_order(media_info)
-        logging.debug('Track Order Chosen!')
         try:
+            media_info = self.media_info(file_path)
+            cleanup_files = []
+            lng_codes = transcode.lng_codes()
+            demuxed = self.demux(file_path,media_info,self.encode_dir,dry_run=self.dry_runs['demux'])
+            cleanup_files.extend(demuxed)
+            duped = self.compare_tracks(demuxed)
+            #media_info['tracks'][i+1]   :   mux_files[i]
+            for vid_id in media_info['id_maps']['Video']:
+                demuxed[vid_id-1] = self.transcode(
+                    file_path,
+                    os.path.join(
+                        self.encode_dir,
+                        u'%s.%s'%(os.path.basename(file_path),
+                                  self.transcode_settings['container'])
+                    ),
+                    media_info['tracks'][vid_id],
+                    dry_run=self.dry_runs['transcode']
+                )
+                cleanup_files.append(demuxed[vid_id-1])
+                logging.debug('Transcoded %s' % demuxed[vid_id-1])
+            track_order = self.choose_track_order(media_info)
+            logging.debug('Track Order Chosen!')
             new_file = transcode.remux(demuxed,media_info,new_file,duped,track_order,dry_run=self.dry_runs['remux'])
-        except Exception as e:
+            logging.debug('New File Success %s' % new_file)
+            
+        except Exception as e: #< Trigger error, leave file in place
             logging.error(repr(e))
-            raise Exception('der')
-        logging.debug('New File Success %s' % new_file)
+            #   Implement #20
+            fh = open(self.log_file, 'a')
+            fh.write('%s\n' % repr(e))
+            fh.close()
+        
+        #   Delete leftover files
         for cleanup_file in cleanup_files:
             try:
                 logging.debug( 'Removing %s' % cleanup_file)
