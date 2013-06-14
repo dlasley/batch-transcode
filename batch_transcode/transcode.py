@@ -143,7 +143,7 @@ class transcode(object):
                             old_file),
                             os.path.join(new_root, '%s%s' % (file_name, extension)),
                             transcode_settings)
-                        if True not in self.DRY_RUNS:
+                        if True not in self.DRY_RUNS: #< ALWAYS LOOK FOR ANY TRUE!
                             os.unlink(old_file)
         #print new_files
         
