@@ -7,7 +7,6 @@
 #    @package    batch-transcode
 #    @version    $Id$
 
-import threading
 import re
 import xml.dom.minidom
 import os
@@ -121,12 +120,7 @@ class transcode(object):
         '''
         self.new_files = []
         self.worker_threads = {}
-        def thread(root,new_root,file_name,extension,transcode_settings):
-            self.new_files.append( self.encode_it(os.path.join(root,'%s%s'%(file_name,extension)), os.path.join(new_root, '%s%s'%(file_name,extension)),transcode_settings) )
-            del self.worker_threads[file_name]
-            if True not in self.DRY_RUNS:   #<  Delete the file if not testing or specified
-                os.unlink(os.path.join(root,file_name,extension))
-                logging.debug('DELETED: %s'%os.path.join(root,file_name,extension))
+
         for root, dirs, files in os.walk(inpath):
             dirs.sort()
             files.sort()
@@ -140,22 +134,16 @@ class transcode(object):
                     print transcode_settings
                 except IOError:
                     transcode_settings = {}
-                #exit()
+                
                 for file_name in files:
                     file_name,extension = os.path.splitext(file_name)
                     if extension in self.VID_EXTS:
-                        #print len(worker_threads)
-                        while len(self.worker_threads) >= self.THREADS:
-                            time.sleep(10)  #<   Wait a bit
-                            #print worker_thread
-                        #else:
-                        self.worker_threads[file_name] = (threading.Thread(target=thread,name=file_name,args=(root,new_root,file_name,extension,transcode_settings)))
-                        self.worker_threads[file_name].daemon = True
-                        self.worker_threads[file_name].start()
-                        #print 'Removed: %s/%s%s'%(root,file_name,extension)
-                        #print new_files
-                        #exit()
+                        self.new_files.append( self.encode_it(
+                            os.path.join(root,'%s%s'%(file_name,extension)),
+                            os.path.join(new_root, '%s%s'%(file_name,extension)),
+                            transcode_settings) )
         #print new_files
+        
     def encode_it(self,file_path, new_file, transcode_settings={}, ):
         '''
             Encode wrapper, whole process
