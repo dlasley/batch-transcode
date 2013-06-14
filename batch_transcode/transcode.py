@@ -89,8 +89,8 @@ class transcode(object):
             'PCM'   :   'pcm',
         }
     }
-    VID_EXTS        =   ['.mkv', '.m4v', '.mp4', '.mpg', '.avi', ]
-    NATIVE_LANGUAGE =   'English', 'eng'
+    VID_EXTS        =   '.mkv', '.m4v', '.mp4', '.mpg', '.avi', 
+    NATIVE_LANGUAGE =   'English', 'eng', 
     THREADS = 1
     def __init__(self, out_dir, debug=False, ):
         '''
@@ -143,7 +143,8 @@ class transcode(object):
                             old_file),
                             os.path.join(new_root, '%s%s' % (file_name, extension)),
                             transcode_settings)
-                        os.unlink(old_file)
+                        if True not in self.DRY_RUNS:
+                            os.unlink(old_file)
         #print new_files
         
     def encode_it(self,file_path, new_file, transcode_settings={}, ):
