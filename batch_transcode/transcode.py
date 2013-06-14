@@ -138,10 +138,12 @@ class transcode(object):
                 for file_name in files:
                     file_name,extension = os.path.splitext(file_name)
                     if extension in self.VID_EXTS:
-                        self.new_files.append( self.encode_it(
-                            os.path.join(root,'%s%s'%(file_name,extension)),
-                            os.path.join(new_root, '%s%s'%(file_name,extension)),
-                            transcode_settings) )
+                        old_file = root, '%s%s' % (file_name, extension)
+                        self.new_files.append(self.encode_it(
+                            old_file),
+                            os.path.join(new_root, '%s%s' % (file_name, extension)),
+                            transcode_settings)
+                        os.unlink(old_file)
         #print new_files
         
     def encode_it(self,file_path, new_file, transcode_settings={}, ):
