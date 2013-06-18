@@ -544,7 +544,7 @@ class transcode(object):
                         win_cmd, cwd=cwd
                         #shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
-                        if subprocess.check_output(['del', '%s*' % log_file]): #< Remove ffmpeg logs
+                        if os.unlink('%s*' % log_file):
                             return new_file
             else:
                 if transcode.command_with_priority(
@@ -556,7 +556,7 @@ class transcode(object):
                         [unicode(' ').join(cmd)],
                         shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
-                        if subprocess.check_output(['rm', '-f', '%s*' % log_file]): #< Remove ffmpeg logs
+                        if os.unlink('%s*' % log_file):
                             return new_file
     @staticmethod
     def fix_dvds_cmd(height, width, ):
