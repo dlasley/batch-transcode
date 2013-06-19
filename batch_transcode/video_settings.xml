@@ -6,7 +6,7 @@
     </settings_group>
     <settings_group name='avconv'>
         <setting name='vcodec'>libx264</setting>
-        <setting name='preset'>ultrafast</setting> <!-- Ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo -->
+        <setting name='preset'>veryslow</setting> <!-- Ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo -->
         <setting name='an' />   <!--    No Audio?   -->
         <setting name='y' />    <!--    Overwrite   -->
         <setting name='sn' />   <!--    No Subs     -->
