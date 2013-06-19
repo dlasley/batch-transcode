@@ -484,7 +484,6 @@ class transcode(object):
             @return str New file path
         '''
         log_file = os.path.basename(old_file)+'.log'
-        self.cleanup_files.append(log_file) #< Fix #21
         cmd = [FFMPEG_LOCATION, u'-i', '"'+old_file+'"', u'-passlogfile' , '"'+log_file+'"' ]
         win_cmd = [FFMPEG_LOCATION, u'-i', old_file, u'-passlogfile' , log_file ]
         transcode_settings = transcode.TRANSCODE_SETTINGS
