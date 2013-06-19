@@ -91,7 +91,6 @@ class transcode(object):
     }
     VID_EXTS        =   '.mkv', '.m4v', '.mp4', '.mpg', '.avi', 
     NATIVE_LANGUAGE =   'English', 'eng', 
-    THREADS = 1
     def __init__(self, out_dir, debug=False, ):
         '''
             Initiate object..only necessary for directory encoding
