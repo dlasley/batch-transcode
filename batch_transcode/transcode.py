@@ -33,7 +33,7 @@ if os.name == 'nt':
 else:
     #IO_NICE = 3 #< @todo #17
     NICE_LVL = 19
-    FFMPEG_LOCATION = 'avconv'
+    FFMPEG_LOCATION = 'ffmpeg'
     MKVMERGE_PATH = 'mkvmerge'
     MKVEXTRACT_PATH = 'mkvextract'
     MEDIAINFO_PATH = 'mediainfo'
@@ -528,6 +528,7 @@ class transcode(object):
         win_cmd.extend([u'-pass', u'2', '"'+new_file+'"'])
         logging.debug( '%s %s' % (first_cmd, cmd))
         logging.info('Transcoding (1st Pass).')
+        log_file = os.path.join(os.path.dirname(new_file), log_file)
         if dry_run:
             return new_file
         else:
@@ -542,8 +543,10 @@ class transcode(object):
                         win_cmd, cwd=cwd
                         #shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
-                        if os.unlink('%s*' % log_file):
-                            return new_file
+                        #   Delete log files
+                        os.unlink('%s-0.log' % log_file)
+                        os.unlink('%s-0.log.mbtree' % log_file)
+                        return new_file
             else:
                 if transcode.command_with_priority(
                     [unicode(' ').join(first_cmd)],
@@ -554,8 +557,9 @@ class transcode(object):
                         [unicode(' ').join(cmd)],
                         shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
-                        if os.unlink('%s*' % log_file):
-                            return new_file
+                        os.unlink('%s-0.log' % log_file)
+                        os.unlink('%s-0.log.mbtree' % log_file)
+                        return new_file
     @staticmethod
     def fix_dvds_cmd(height, width, ):
         '''
