@@ -646,6 +646,7 @@ class transcode(object):
                     cmd.extend( [u'--language', u'0:%s' % media_info['tracks'][i+1]['language'], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
+        os.makedirs(os.path.dirname(new_file))
         if transcode.command_with_priority(cmd)[0] == 0:
             with open(new_file) as f: pass #< Validate file exists
             return new_file
