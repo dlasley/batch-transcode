@@ -557,8 +557,14 @@ class transcode(object):
                         [unicode(' ').join(cmd)],
                         shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
-                        os.unlink('%s-0.log' % log_file)
-                        os.unlink('%s-0.log.mbtree' % log_file)
+                        try:
+                            os.unlink('%s-0.log' % log_file)
+                        except OSError:
+                            pass
+                        try:
+                            os.unlink('%s-0.log.mbtree' % log_file)
+                        except OSError:
+                            pass
                         return new_file
     @staticmethod
     def fix_dvds_cmd(height, width, ):
@@ -646,7 +652,10 @@ class transcode(object):
                     cmd.extend( [u'--language', u'0:%s' % media_info['tracks'][i+1]['language'], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
-        os.makedirs(os.path.dirname(new_file))
+        try:
+            os.makedirs(os.path.dirname(os.path.realpath(new_file)))
+        except OSError:
+            pass
         if transcode.command_with_priority(cmd)[0] == 0:
             with open(new_file) as f: pass #< Validate file exists
             return new_file
