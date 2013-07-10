@@ -624,10 +624,10 @@ class transcode(object):
             @return String  New file path
         '''
         logging.debug('In Remux')
-        try:
-            movie_name = media_info['tracks'][0]['Movie_name']
-        except KeyError:
-            movie_name = new_file.rsplit(os.path.sep,3).pop(2)
+        #try:
+        #    movie_name = media_info['tracks'][0]['Movie_name']
+        #except KeyError:
+        movie_name = os.path.basename(new_file).rplit('.', 1)[0]
         cmd = [MKVMERGE_PATH, u'-o', new_file, u'--title', u"%s" % movie_name]
         #cwd = os.path.dirname(mux_files[0])
         if track_order:
