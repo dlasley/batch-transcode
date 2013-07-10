@@ -627,7 +627,7 @@ class transcode(object):
         #try:
         #    movie_name = media_info['tracks'][0]['Movie_name']
         #except KeyError:
-        movie_name = os.path.basename(new_file).rplit('.', 1)[0]
+        movie_name = os.path.basename(new_file).rsplit('.', 1)[0]
         cmd = [MKVMERGE_PATH, u'-o', new_file, u'--title', u"%s" % movie_name]
         #cwd = os.path.dirname(mux_files[0])
         if track_order:
