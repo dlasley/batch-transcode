@@ -544,8 +544,14 @@ class transcode(object):
                         #shell=True, cwd=os.path.dirname(new_file),
                     )[0] == 0: #< 2nd pass success
                         #   Delete log files
-                        os.unlink('%s-0.log' % log_file)
-                        os.unlink('%s-0.log.mbtree' % log_file)
+                        try:
+                            os.unlink('%s-0.log' % log_file)
+                        except OSError:
+                            pass
+                        try:
+                            os.unlink('%s-0.log.mbtree' % log_file)
+                        except OSError:
+                            pass
                         return new_file
             else:
                 if transcode.command_with_priority(
