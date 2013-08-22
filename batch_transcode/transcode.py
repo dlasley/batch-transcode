@@ -642,11 +642,11 @@ class transcode(object):
             for track_id in track_order:
                 track_type = media_info['tracks'][track_id]['track_type'].lower()
                 __track_id = '1' if track_type == 'Video' else '0'
-                cmd.extend( [u'--language', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['language']) ] )
+                cmd.extend( [u'--language', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['Language']) ] )
                 try:
                     cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['Title'])])
                 except KeyError:
-                    cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['language'])])
+                    cmd.extend( [u'--track-name', u'%s:%s' % (__track_id,media_info['tracks'][track_id]['Language'])])
                 if track_type not in default_tracks:
                     cmd.extend([u'--default-track', u'%s:yes' % __track_id])
                     default_tracks.append(track_type)
@@ -655,7 +655,7 @@ class transcode(object):
             for i in xrange(0,len(mux_files)):
                 #   media_info['tracks'][i+1]   :   mux_files[i]
                 if mux_files[i] not in dups:
-                    cmd.extend( [u'--language', u'0:%s' % media_info['tracks'][i+1]['language'], u'%s' % mux_files[i] ] )
+                    cmd.extend( [u'--language', u'0:%s' % media_info['tracks'][i+1]['Language'], u'%s' % mux_files[i] ] )
         logging.debug( ' '.join(cmd) )
         logging.info('Remuxing.')
         try:
