@@ -364,8 +364,12 @@ class transcode(object):
             @param  file_path   str     file path
             @return dict    Media Info
         '''
+        
+        logging.debug("Getting media info for %s" % file_path)
         mkvmerge    =   transcode.mkvmerge_identify(file_path)
         mediainfo   =   transcode.mediainfo(file_path)
+        logging.debug("Got the info")
+        
         track_maps = {}
         for track_id, track in mkvmerge.iteritems():
             try:
@@ -599,13 +603,12 @@ class transcode(object):
         demuxed = []
         for track in media_info['tracks']:
             try:
-                cmd.append(u'%s:%s'%(track['ID'],
-                                     os.path.join(track['ID'],out_path,
-                                            u'%s%s.%s'%(os.path.basename(file_path),
-                                                        track['ID'],track['extension']))))
-                demuxed.append(os.path.join(out_path,
-                                            u'%s%s.%s'%(os.path.basename(file_path),
-                                                        track['ID'],track['extension'])))
+                demuxed_file = os.path.join(
+                    out_path, u'%s%s.%s'%(os.path.basename(file_path),
+                    track['number'],track['extension']))
+                
+                cmd.append(u'%s:%s'%(track['number'], demuxed_file))
+                demuxed.append(demuxed_file)
             except KeyError:
                 pass
         logging.debug( cmd )
