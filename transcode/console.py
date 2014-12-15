@@ -2,7 +2,7 @@
 
 import subprocess
 import os
-
+from transcode.exceptions import CommandException
 
 if os.name == 'nt':
     
@@ -23,9 +23,9 @@ else:
 
 
 class Console(object):
-    def __init__(self, encoding='UTF-8'):
-        pass
     
+    def __init__(self, encoding='UTF-8'):
+        self.encoding = encoding
     
     def command_with_priority(command, shell=False, cwd='./', ):
         '''
@@ -34,7 +34,7 @@ class Console(object):
         @param  command str     Command to execute
         @param  shell   bool    Use shell
         @param  cwd     str     Current working directory
-        @return tuple   (returncode, stdoutdata, stderrdata)
+        @return tuple   (returncode, stdout, stderr)
         '''
         
         if WINDOWS:
@@ -55,22 +55,26 @@ class Console(object):
             
         else:
             
-            #def set_nices():#< @todo
+            #def set_nices():#< @TODO
             #    os.nice(NICE_LVL)
             #    p = psutil.Process(os.getpid())
             #    priorityclasses = [ psutil.IO
             #    p.set_ionice(psutil.IOPRIO_CLASS_IDLE)
+            
             process = subprocess.Popen(
                 command, shell=shell, cwd=cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=lambda : os.nice(NICE_LVL)
+                preexec_fn=lambda: os.nice(NICE_LVL)
             )
             
-        communicate_return = process.communicate()
+        stdout, stderr = process.communicate()
         
         if process.returncode != 0:
-            logging.error('Command returned an error!\n\n%s\n\n%s\n\n' % (str(command), str(communicate_return)))
+            raise CommandException(
+                'Received non-zero exit code (%d)' % process.returncode,
+                command, stdout, stderr
+            )
             
-        return process.returncode, communicate_return[0], communicate_return[1]
+        return process.returncode, stdout, stderr
     
